@@ -206,6 +206,7 @@ dependencies {
     implementation(project(":data:schedule"))
     implementation(project(":data:grade"))
     implementation(project(":data:chaoxing"))
+    implementation(project(":data:rainclass"))
     implementation(project(":data:recharge"))
     implementation(project(":data:update"))
     implementation(project(":background"))

@@ -153,7 +153,8 @@ object Store : ChaoxingReminderStore {
     fun getShowEmptyCourses(): Boolean = sp.getBoolean("cx_show_empty_courses", false)
     fun saveShowEmptyCourses(v: Boolean) = putBool("cx_show_empty_courses", v)
 
-    fun getShowDone(): Boolean = sp.getBoolean("cx_show_done", true)
+    // 已完成/已提交的任务默认不显示；需要时在侧边菜单里打开。
+    fun getShowDone(): Boolean = sp.getBoolean("cx_show_done", false)
     fun saveShowDone(v: Boolean) = putBool("cx_show_done", v)
 
     fun getDoneGray(): Boolean = sp.getBoolean("cx_done_gray", true)

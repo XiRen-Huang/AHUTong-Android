@@ -13,10 +13,12 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -56,6 +58,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -117,6 +121,13 @@ fun XuexiaotongScreen() {
     val showEmptyCourses by viewModel.showEmptyCourses.collectAsState()
     val remindSetting by viewModel.remindSetting.collectAsState()
 
+    val rainClassViewModel: RainClassViewModel = androidx.hilt.navigation.compose.hiltViewModel()
+    val rainClassLoggedIn by rainClassViewModel.loggedIn.collectAsState()
+    val rainClassWorks by rainClassViewModel.works.collectAsState()
+    val allWorks = remember(works, rainClassWorks, rainClassLoggedIn) {
+        works + if (rainClassLoggedIn) rainClassWorks else emptyList<Work>()
+    }
+
     // 未登录也可直接使用日历（自建日程本地可用），仅登录/同步需进独立登录页
     var showLogin by remember { mutableStateOf(false) }
 
@@ -157,6 +168,7 @@ fun XuexiaotongScreen() {
     var sideMenuOpen by remember { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current
     var selectedWork by remember { mutableStateOf<Work?>(null) }
+    var dayTaskChooser by remember { mutableStateOf<MergedDayTasks?>(null) }
     var webViewWork by remember { mutableStateOf<Work?>(null) }
     var showAddEvent by remember { mutableStateOf(false) }
     var pendingDeleteEvent by remember { mutableStateOf<Work?>(null) }
@@ -268,6 +280,12 @@ fun XuexiaotongScreen() {
                                     modifier = Modifier.size(17.dp)
                                 )
                             }
+                            if (tab == XuexiaotongSubTab.SCHEDULE) {
+                                RainClassToolbarAction(
+                                    viewModel = rainClassViewModel,
+                                    compact = true
+                                )
+                            }
                             val isSyncingBtn = if (tab == XuexiaotongSubTab.COURSE) courseSyncing else syncing
                             if (isSyncingBtn) {
                                 Box(
@@ -330,7 +348,7 @@ fun XuexiaotongScreen() {
                         when (t) {
                             XuexiaotongSubTab.SCHEDULE -> {
                                 ScheduleTab(
-                                    works = works,
+                                    works = allWorks,
                                     customEvents = customEvents,
                                     syncing = syncing,
                                     syncMsg = syncMsg,
@@ -346,6 +364,11 @@ fun XuexiaotongScreen() {
                                         year = y; month = m
                                     },
                                     onWorkClick = { selectedWork = it },
+                                    onMergedSegmentClick = { tapped ->
+                                        val single = tapped.entries.singleOrNull()
+                                        if (single != null) selectedWork = single.work
+                                        else if (tapped.entries.isNotEmpty()) dayTaskChooser = tapped
+                                    },
                                     isRadiant = isRadiant,
                                     pageBackdrop = pageBackdrop,
                                     headerTopPadding = headerTopPadding,
@@ -445,6 +468,12 @@ fun XuexiaotongScreen() {
                                 tint = MaterialTheme.colorScheme.onSurface
                             )
                         }
+                        if (tab == XuexiaotongSubTab.SCHEDULE) {
+                            RainClassToolbarAction(
+                                viewModel = rainClassViewModel,
+                                compact = false
+                            )
+                        }
                         val isSyncingBtn = if (tab == XuexiaotongSubTab.COURSE) courseSyncing else syncing
                         if (isSyncingBtn) {
                             Box(
@@ -498,7 +527,7 @@ fun XuexiaotongScreen() {
                         when (t) {
                             XuexiaotongSubTab.SCHEDULE -> {
                                 ScheduleTab(
-                                    works = works,
+                                    works = allWorks,
                                     customEvents = customEvents,
                                     syncing = syncing,
                                     syncMsg = syncMsg,
@@ -514,6 +543,11 @@ fun XuexiaotongScreen() {
                                         year = y; month = m
                                     },
                                     onWorkClick = { selectedWork = it },
+                                    onMergedSegmentClick = { tapped ->
+                                        val single = tapped.entries.singleOrNull()
+                                        if (single != null) selectedWork = single.work
+                                        else if (tapped.entries.isNotEmpty()) dayTaskChooser = tapped
+                                    },
                                     isRadiant = false,
                                     loggedIn = loggedIn,
                                     onLogin = { showLogin = true }
@@ -539,34 +573,114 @@ fun XuexiaotongScreen() {
 
     // 任务详情弹窗
     selectedWork?.let { work ->
-        WorkDetailDialog(
-            work = work,
-            onDismiss = { selectedWork = null },
-            onToggleDone = if (work.workId.startsWith("event_")) {
-                {
-                    viewModel.toggleCustomEventDone(work.workId.removePrefix("event_"))
+        if (work.workId.startsWith("rainclass:")) {
+            RainClassWorkDetailDialog(
+                work = work,
+                onDismiss = { selectedWork = null },
+                onToggleDone = { done ->
+                    rainClassViewModel.setSubmitted(work.workId, done)
                     selectedWork = null
                 }
-            } else null,
-            onDelete = if (work.workId.startsWith("event_")) {
-                {
-                    pendingDeleteEvent = work
-                    selectedWork = null
+            )
+        } else {
+            WorkDetailDialog(
+                work = work,
+                onDismiss = { selectedWork = null },
+                onToggleDone = if (work.workId.startsWith("event_")) {
+                    {
+                        viewModel.toggleCustomEventDone(work.workId.removePrefix("event_"))
+                        selectedWork = null
+                    }
+                } else null,
+                onDelete = if (work.workId.startsWith("event_")) {
+                    {
+                        pendingDeleteEvent = work
+                        selectedWork = null
+                    }
+                } else null,
+                onViewQuestions = if (!work.workId.startsWith("event_") && work.detailUrl.isNotEmpty()) {
+                    {
+                        webViewWork = work
+                        selectedWork = null
+                    }
+                } else null,
+                onOpenInChaoxing = if (!work.workId.startsWith("event_") && work.detailUrl.isNotEmpty()) {
+                    {
+                        openWorkInChaoxingApp(context, work)
+                        selectedWork = null
+                    }
+                } else null
+            )
+        }
+    }
+
+    // 同一天有多个雨课堂任务重叠时，点合并条弹出当天列表
+    dayTaskChooser?.let { state ->
+        val title = remember(state) {
+            "${formatMergedDayLabel(state.startTs, state.endTs)} · ${state.entries.size} 项作业"
+        }
+        AppModalBottomSheet(
+            title = title,
+            onDismissRequest = { dayTaskChooser = null }
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 24.dp)
+            ) {
+                val sorted = state.entries.sortedBy { it.work.endTs ?: Long.MAX_VALUE }
+                sorted.forEachIndexed { index, entry ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                dayTaskChooser = null
+                                selectedWork = entry.work
+                            }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .background(
+                                    RainClassBarPalette[entry.colorIndex % RainClassBarPalette.size],
+                                    CircleShape
+                                )
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                entry.work.title,
+                                fontSize = 14.sp,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            val subtitle = listOfNotNull(
+                                entry.work.courseName.takeIf { it.isNotEmpty() },
+                                formatDeadline(entry.work.endTs)
+                            ).joinToString(" · ")
+                            if (subtitle.isNotEmpty()) {
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    subtitle,
+                                    fontSize = 12.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                    if (index != sorted.lastIndex) {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                    }
                 }
-            } else null,
-            onViewQuestions = if (!work.workId.startsWith("event_") && work.detailUrl.isNotEmpty()) {
-                {
-                    webViewWork = work
-                    selectedWork = null
-                }
-            } else null,
-            onOpenInChaoxing = if (!work.workId.startsWith("event_") && work.detailUrl.isNotEmpty()) {
-                {
-                    openWorkInChaoxingApp(context, work)
-                    selectedWork = null
-                }
-            } else null
-        )
+            }
+        }
     }
 
     // 作业题目查看（WebView 只读弹窗）
@@ -750,6 +864,7 @@ private fun ScheduleTab(
     month: Int,
     onChangeMonth: (Int) -> Unit,
     onWorkClick: (Work) -> Unit,
+    onMergedSegmentClick: (MergedDayTasks) -> Unit,
     isRadiant: Boolean = false,
     pageBackdrop: Backdrop? = null,
     headerTopPadding: Dp = 102.dp,
@@ -796,6 +911,7 @@ private fun ScheduleTab(
                     month = month,
                     onChangeMonth = onChangeMonth,
                     onWorkClick = onWorkClick,
+                    onMergedSegmentClick = onMergedSegmentClick,
                     loggedIn = loggedIn,
                     onLogin = onLogin
                 )
@@ -871,7 +987,13 @@ private fun ScheduleTab(
                     }
                     Column {
                         model.rows.forEachIndexed { ri, row ->
-                            MonthRowView(row = row, isShade = ri % 2 == 1, doneGray = doneGray, onWorkClick = onWorkClick)
+                            MonthRowView(
+                                row = row,
+                                isShade = ri % 2 == 1,
+                                doneGray = doneGray,
+                                onWorkClick = onWorkClick,
+                                onMergedSegmentClick = onMergedSegmentClick
+                            )
                         }
                         if (model.noWorks) {
                             Row(
@@ -924,6 +1046,7 @@ private fun ScheduleCalendarContent(
     month: Int,
     onChangeMonth: (Int) -> Unit,
     onWorkClick: (Work) -> Unit,
+    onMergedSegmentClick: (MergedDayTasks) -> Unit,
     loggedIn: Boolean = true,
     onLogin: () -> Unit = {}
 ) {
@@ -986,7 +1109,13 @@ private fun ScheduleCalendarContent(
             }
             Column {
                 model.rows.forEachIndexed { ri, row ->
-                    MonthRowView(row = row, isShade = ri % 2 == 1, doneGray = doneGray, onWorkClick = onWorkClick)
+                    MonthRowView(
+                        row = row,
+                        isShade = ri % 2 == 1,
+                        doneGray = doneGray,
+                        onWorkClick = onWorkClick,
+                        onMergedSegmentClick = onMergedSegmentClick
+                    )
                 }
                 if (model.noWorks) {
                     if (loggedIn) {
@@ -1050,7 +1179,8 @@ private fun MonthRowView(
     row: com.ahu.ahutong.ui.screen.xuexiaotong.CalendarRow,
     isShade: Boolean,
     doneGray: Boolean,
-    onWorkClick: (Work) -> Unit
+    onWorkClick: (Work) -> Unit,
+    onMergedSegmentClick: (MergedDayTasks) -> Unit
 ) {
     val cellBg = if (isShade) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.02f) else Color.Transparent
 
@@ -1088,7 +1218,7 @@ private fun MonthRowView(
             }
         }
         // 色块层
-        if (row.blocks.isNotEmpty()) {
+        if (row.blocks.isNotEmpty() || row.mergedBars.isNotEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1097,6 +1227,9 @@ private fun MonthRowView(
             ) {
                 row.blocks.forEach { b ->
                     WorkBlockView(b, doneGray, onWorkClick)
+                }
+                row.mergedBars.forEach { bar ->
+                    MergedWorkBarView(bar, row.cells, doneGray, onMergedSegmentClick)
                 }
             }
         } else {
@@ -1152,18 +1285,207 @@ private fun WorkBlockView(
                     .padding(horizontal = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    b.work.title,
-                    modifier = Modifier.weight(1f),
-                    fontSize = 9.sp,
-                    lineHeight = 11.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    color = finalText
-                )
+                if (b.label.isNotEmpty()) {
+                    Text(
+                        b.label,
+                        modifier = Modifier.weight(1f),
+                        fontSize = 9.sp,
+                        lineHeight = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = finalText
+                    )
+                }
                 if (b.continueNext) {
                     Text("▸", fontSize = 8.sp, lineHeight = 11.sp, color = finalText)
                 }
+            }
+        }
+    }
+}
+
+/** 点击合并条某一段时交给根部的快照：该段覆盖的日期范围与当天活动的任务。 */
+private data class MergedDayTasks(
+    val startTs: Long,
+    val endTs: Long,
+    val entries: List<MergedBarEntry>
+)
+
+private fun formatMergedDayLabel(startTs: Long, endTs: Long): String {
+    val start = Calendar.getInstance().apply { timeInMillis = startTs }
+    val end = Calendar.getInstance().apply { timeInMillis = endTs }
+    val startMonth = start.get(Calendar.MONTH) + 1
+    val startDay = start.get(Calendar.DAY_OF_MONTH)
+    val endMonth = end.get(Calendar.MONTH) + 1
+    val endDay = end.get(Calendar.DAY_OF_MONTH)
+    return when {
+        startMonth == endMonth && startDay == endDay -> "${startMonth}月${startDay}日"
+        startMonth == endMonth -> "${startMonth}月${startDay}日–${endDay}日"
+        else -> "${startMonth}月${startDay}日–${endMonth}月${endDay}日"
+    }
+}
+
+private fun formatDeadline(ts: Long?): String? {
+    if (ts == null) return null
+    val c = Calendar.getInstance().apply { timeInMillis = ts }
+    return "${c.get(Calendar.MONTH) + 1}月${c.get(Calendar.DAY_OF_MONTH)}日 截止"
+}
+
+/**
+ * 雨课堂任务颜色盘：每个任务一种饱和且有区分度的颜色。
+ * 重叠段的颜色由活动任务等权平均后再混入中性深灰，越挤越暗，和单任务纯色容易区分。
+ */
+private val RainClassBarPalette = listOf(
+    0xFFE57373, 0xFFFFB74D, 0xFFFFD54F, 0xFFDCE775,
+    0xFF81C784, 0xFF4DB6AC, 0xFF4FC3F7, 0xFF64B5F6,
+    0xFF7986CB, 0xFFBA68C8, 0xFFF06292, 0xFFA1887F
+).map { Color(it) }
+
+private val RainClassBarText = Color(0xFF1A1A1A)
+private val RainClassBlendNeutral = Color(0xFF4A4A4A)
+private val RainClassDoneGray = Color(0xFF9E9E9E)
+
+private fun mixBarColor(from: Color, to: Color, fraction: Float): Color = Color(
+    red = from.red + (to.red - from.red) * fraction,
+    green = from.green + (to.green - from.green) * fraction,
+    blue = from.blue + (to.blue - from.blue) * fraction,
+    alpha = 1f
+)
+
+/** 按段内活动任务算叠加色：单任务纯色；多任务等权平均后按数量混入中性深灰。 */
+private fun blendedBarColor(
+    entries: List<MergedBarEntry>,
+    doneGray: Boolean
+): Color {
+    if (entries.isEmpty()) return Color.Transparent
+    val colors = entries.map { entry ->
+        if (doneGray && entry.work.isDone) {
+            RainClassDoneGray
+        } else {
+            RainClassBarPalette[entry.colorIndex % RainClassBarPalette.size]
+        }
+    }
+    val base = if (colors.size == 1) {
+        colors.single()
+    } else {
+        Color(
+            red = colors.map { it.red }.average().toFloat(),
+            green = colors.map { it.green }.average().toFloat(),
+            blue = colors.map { it.blue }.average().toFloat(),
+            alpha = 1f
+        ).let { average ->
+            val weight = (0.16f + 0.06f * (colors.size - 2)).coerceAtMost(0.36f)
+            mixBarColor(average, RainClassBlendNeutral, weight)
+        }
+    }
+    val allDone = entries.all { it.work.isDone }
+    return base.copy(alpha = if (doneGray && allDone) 0.35f else 0.85f)
+}
+
+/** 标题槽可能跨多个段，用槽内各段复合到卡片背景后的最小亮度决定深字还是白字。 */
+private fun barTextColorFor(
+    title: MergedBarTitle,
+    bar: CalendarMergedBar,
+    doneGray: Boolean,
+    surface: Color
+): Color {
+    val minLuminance = bar.segments
+        .filter { it.colStart <= title.colEnd && it.colEnd >= title.colStart }
+        .map { seg ->
+            val active = seg.entryIndices.map { bar.entries[it] }
+            blendedBarColor(active, doneGray).compositeOver(surface).luminance()
+        }
+        .minOrNull() ?: 1f
+    return if (minLuminance < 0.42f) Color.White.copy(alpha = 0.92f) else RainClassBarText
+}
+
+/**
+ * 雨课堂合并组：整组只有一行 16dp。
+ * 段 = 当天活动任务集合相同的一段连续日期，颜色是该集合的叠加色；
+ * 标题从各自任务的起始列开始，槽的右边界由下一个起始列或任务自身结束列决定。
+ */
+@Composable
+private fun MergedWorkBarView(
+    bar: CalendarMergedBar,
+    cells: List<CalendarCell>,
+    doneGray: Boolean,
+    onMergedSegmentClick: (MergedDayTasks) -> Unit
+) {
+    val cellPct = 100f / 7f
+    val leftPct = bar.colStart * cellPct
+    val widthPct = (bar.colEnd - bar.colStart + 1) * cellPct
+    var parentWidth by remember { mutableStateOf(0) }
+    val density = LocalDensity.current
+    val surface = MaterialTheme.colorScheme.surface
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .onSizeChanged { parentWidth = it.width }
+    ) {
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxWidth(widthPct / 100f)
+                .offset {
+                    IntOffset(
+                        x = (parentWidth * leftPct / 100f).roundToInt(),
+                        y = with(density) { bar.y.dp.roundToPx() }
+                    )
+                }
+                .padding(horizontal = 1.dp)
+                .height(CalendarModel.BLOCK_H.dp)
+                .clip(RoundedCornerShape(5.dp))
+        ) {
+            val span = bar.colEnd - bar.colStart + 1
+            val cellWidth = maxWidth / span
+
+            bar.segments.forEach { seg ->
+                val active = seg.entryIndices.map { bar.entries[it] }
+                Box(
+                    modifier = Modifier
+                        .offset(x = cellWidth * (seg.colStart - bar.colStart))
+                        .width(cellWidth * (seg.colEnd - seg.colStart + 1))
+                        .fillMaxHeight()
+                        .background(blendedBarColor(active, doneGray))
+                        .clickable {
+                            onMergedSegmentClick(
+                                MergedDayTasks(
+                                    startTs = cells[seg.colStart].ts,
+                                    endTs = cells[seg.colEnd].ts,
+                                    entries = active
+                                )
+                            )
+                        }
+                )
+            }
+
+            // 集合变化的日界画一条细分隔线；分隔线不消费点击。
+            bar.segments.drop(1).forEach { seg ->
+                Box(
+                    modifier = Modifier
+                        .offset(x = cellWidth * (seg.colStart - bar.colStart))
+                        .width(1.dp)
+                        .fillMaxHeight()
+                        .background(Color(0x22000000))
+                )
+            }
+
+            bar.titles.forEach { title ->
+                Text(
+                    text = title.text,
+                    modifier = Modifier
+                        .offset(x = cellWidth * (title.colStart - bar.colStart) + 3.dp)
+                        .width(
+                            (cellWidth * (title.colEnd - title.colStart + 1) - 6.dp)
+                                .coerceAtLeast(0.dp)
+                        )
+                        .align(Alignment.CenterStart),
+                    fontSize = 8.sp,
+                    lineHeight = 10.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = barTextColorFor(title, bar, doneGray, surface)
+                )
             }
         }
     }

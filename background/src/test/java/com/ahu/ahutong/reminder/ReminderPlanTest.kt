@@ -43,4 +43,18 @@ class ReminderPlanTest {
         assertTrue(ReminderPlan.build(setting, true, works, events, now).isEmpty())
         assertEquals(1, ReminderPlan.build(setting.copy(onlyTodo = false), true, works, events, now).size)
     }
+
+    @Test
+    fun `rainclass work uses its prefixed id as reminder key`() {
+        val rainClassWork = Work(
+            workId = "rainclass:10:20",
+            title = "雨课堂作业",
+            endTs = due
+        )
+
+        val plan = ReminderPlan.build(setting, true, listOf(rainClassWork), emptyList(), now)
+
+        assertEquals(listOf("rainclass:10:20|$due"), plan.map { it.key })
+        assertEquals(due - 60 * 60_000L, plan.single().triggerAtMillis)
+    }
 }

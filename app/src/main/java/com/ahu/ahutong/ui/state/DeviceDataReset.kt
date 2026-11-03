@@ -6,6 +6,7 @@ import com.ahu.ahutong.core.storage.SettingsStore
 import com.ahu.ahutong.data.crawler.manager.CookieManager
 import com.ahu.ahutong.data.dao.AHUCache
 import com.ahu.ahutong.data.notice.CampusNoticeRepository
+import com.ahu.ahutong.data.rainclass.RainClassSession
 import com.ahu.ahutong.data.session.AhuSession
 import com.ahu.ahutong.data.update.ApkUpdateSkipStore
 import com.ahu.ahutong.data.xuexiaotong.ChaoxingReminders
@@ -34,7 +35,8 @@ class DeviceDataReset @Inject constructor(
     private val session: AhuSession,
     private val updateSkipStore: ApkUpdateSkipStore,
     private val chaoxingSession: ChaoxingSession,
-    private val chaoxingReminders: ChaoxingReminders
+    private val chaoxingReminders: ChaoxingReminders,
+    private val rainClassSession: RainClassSession
 ) : AppDataReset {
 
     private val context: Context get() = AppEnvironmentHolder.context()
@@ -58,6 +60,8 @@ class DeviceDataReset @Inject constructor(
         // clearSession 撤内存中的 CookieJar 与在途请求；后两行清磁盘上的两个 prefs 文件。
         chaoxingSession.clearSession()
         Store.clearAll(context)
+        // 雨课堂：Cookie（SecureStorage 加密）、本地课程/作业缓存和会话标记一起清。
+        rainClassSession.clearSession(clearCachedData = true)
         PersistentCookieJar.clearPersisted(context)
         AHUCache.clearAll()
         RustSDK.initSafe("")

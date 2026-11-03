@@ -137,6 +137,7 @@ class ModuleBoundaryTest {
             "data/schedule",
             "data/grade",
             "data/chaoxing",
+            "data/rainclass",
             "data/recharge",
             "data/update",
             "background",
@@ -736,6 +737,32 @@ class ModuleBoundaryTest {
                 forbiddenContentRegex = Regex(
                     "resolveLocalFirst|syncRemoteConfig|saveCookie|saveCredential|clearCredential|" +
                         "saveKeepLogin|loginByPassword|silentRelogin"
+                )
+            ),
+            BoundaryRule(
+                id = "R31-rainclass-data-leaf",
+                packagePrefix = "com/ahu/ahutong/",
+                modules = listOf("data/rainclass"),
+                forbiddenImportPrefixes = listOf(
+                    // 雨课堂数据层只认识 core 与自己的 DTO：界面、提醒、后台组件都不许被它依赖。
+                    "import com.ahu.ahutong.ui.",
+                    "import com.ahu.ahutong.reminder.",
+                    "import com.ahu.ahutong.notification.",
+                    "import com.ahu.ahutong.appwidget.",
+                    "import com.ahu.ahutong.data.dao.",
+                    "import com.ahu.ahutong.data.crawler.",
+                    "import com.ahu.ahutong.data.xuexiaotong.",
+                    "import com.ahu.ahutong.data.session.SessionStore",
+                    "import com.ahu.ahutong.data.session.RepositoryAhuSession",
+                    "import com.ahu.ahutong.data.session.DefaultAhuSession",
+                    "import com.ahu.ahutong.data.session.SecureCredentialVault",
+                    "import com.ahu.ahutong.data.session.RepositorySessionExpiryHook",
+                    // SecureStorage 本身是允许的（Cookie 加密）；只禁具体保险箱实现。
+                    "import com.ahu.ahutong.data.security.SecureBoxStore",
+                    "import com.ahu.ahutong.data.security.SecureCredentialVault",
+                    "import com.ahu.ahutong.personalization.",
+                    "import com.ahu.ahutong.sdk.",
+                    "import com.ahu.ahutong.AHUApplication"
                 )
             ),
             BoundaryRule(

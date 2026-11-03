@@ -4,10 +4,10 @@ import com.ahu.ahutong.data.xuexiaotong.ChaoxingReminders
 import com.ahu.ahutong.data.xuexiaotong.ChaoxingSession
 import com.ahu.ahutong.data.xuexiaotong.ChaoxingStore
 import com.ahu.ahutong.data.xuexiaotong.ChaoxingReminderStore
-import com.ahu.ahutong.data.xuexiaotong.Store
 import com.ahu.ahutong.ui.state.AppChaoxingReminders
 import com.ahu.ahutong.ui.state.AppChaoxingSession
 import com.ahu.ahutong.ui.state.AppChaoxingStore
+import com.ahu.ahutong.ui.state.AppReminderStore
 import com.ahu.ahutong.ui.screen.xuexiaotong.XuexiaotongDispatcher
 import dagger.Binds
 import dagger.Module
@@ -41,15 +41,17 @@ abstract class ChaoxingWiringModule {
         implementation: AppChaoxingReminders
     ): ChaoxingReminders
 
-    companion object {
+    /**
+     * 后台提醒只拿窄视图。合并超星与雨课堂的实现放在 :app，
+     * 因此 :background 仍然只认识 ChaoxingReminderStore。
+     */
+    @Binds
+    @Singleton
+    abstract fun bindChaoxingReminderStore(
+        implementation: AppReminderStore
+    ): ChaoxingReminderStore
 
-        /**
-         * 后台提醒只拿窄视图。Store 是 Kotlin object（没有可注入的构造点），
-         * 而这里要交出去的也只是它那六个成员。
-         */
-        @Provides
-        @Singleton
-        fun provideChaoxingReminderStore(): ChaoxingReminderStore = Store
+    companion object {
 
         /** 学习通的 ViewModel 只要求"一个 IO 调度器"，具体是谁由组合根决定。 */
         @Provides
